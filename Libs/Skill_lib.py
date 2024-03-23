@@ -53,7 +53,7 @@ class Skill_tree:
             start_x = (surface_size[0]-(2*len(skills)-1)*self.rect.width)/2
             for x,skill in enumerate(skills):
                 skill.rect.update((start_x+2*x*skill.rect.width,(2*y+0.5)*skill.rect.height),skill.rect.size)
-                skill_image.blit(skill.image,skill.rect)
+                #skill_image.blit(skill.image,skill.rect)
                 for last in skill.last_skills:
                     for start,end in establish_connection(last.rect.midbottom,skill.rect.midtop):
                         pygame.draw.line(skill_image,(255,255,255),start,end,3)
