@@ -1,5 +1,5 @@
 #Made by Han_feng
-import pygame
+import pygame,re
 from pygame.locals import *
 pygame.init()
 
@@ -37,19 +37,29 @@ def image_selected(surface:pygame.Surface,color:tuple=(255,215,0),size=3):
     pygame.draw.line(res_image,color,(width-1,height-1),(width*3/4,height-1),size)
     return res_image
 
-
 class Text_box:
-    def __init__(self,font:pygame.font.Font,width:int=0,color:tuple=(255,255,255)):
+    def __init__(self,font:pygame.font.Font,width:int=0):
         self.text = ""
         self.font = font
         self.width = width
-        self.color = color
         self.image = pygame.Surface([width,0])
 
     def update(self):
+        #Preprocess
+        step, operations = 0,[]
+        for tag in re.finditer(r"<.*?>",self.text.replace("\n","")):
+            start,end = tag.span()
+            order = tag.group()[1:-1].split("=")
+            if order[0] == "color":
+                operations.append((order[0],order[1],start-step))
+            else:
+                operations.append((order[0],eval(order[1]),start-step))
+            step += end-start
+        text = re.sub("<.*?>","",self.text)
+
         #create multiple lines of string
         width, max_width, str_list, line = 0, 0, [], ""
-        for char,w in zip(self.text,[i[4] for i in self.font.metrics(self.text)]):
+        for char,w in zip(text,[i[4] for i in self.font.metrics(text)]):
             if char == "\n" or (width + w > self.width and self.width):
                 str_list.append(line)
                 width,line = 0,""
@@ -63,9 +73,26 @@ class Text_box:
 
         #create a blank image and draw the lines on it
         height_per_line = self.font.get_linesize()
+        attrs = {"color":"#FFFFFF"}
         self.image = pygame.Surface([self.width if self.width else max_width,height_per_line*len(str_list)])
+
+        attr,value,position = operations.pop(0) if operations else (0,0,-1)
+        step,width = 0,0
         for i,line in enumerate(str_list):
-            self.image.blit(self.font.render(line,True,self.color),(0,height_per_line*i))
+            length,pos = len(line),position-step
+            while pos >= 0 and pos < length:
+                print(attr,value,pos,line[:pos])
+                font_image = self.font.render(line[:pos],True,attrs["color"])
+                self.image.blit(font_image,(width,height_per_line*i))
+                width += font_image.get_width()
+                step += len(line[:pos])
+                line = line[pos:]
+                attrs[attr] = value
+                attr,value,position = operations.pop(0) if operations else (0,0,-1)
+                pos = position-step
+            self.image.blit(self.font.render(line,True,attrs["color"]),(width,height_per_line*i))
+            step += len(line)
+            width = 0
     
     def set_text(self,text:str):
         self.text = text
@@ -77,10 +104,6 @@ class Text_box:
 
     def set_width(self,width=0):
         self.width = width
-        self.update()
-
-    def set_color(self,color:tuple):
-        self.color = color
         self.update()
 
 class Scroll_box:
