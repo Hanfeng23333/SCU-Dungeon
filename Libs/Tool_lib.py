@@ -73,7 +73,12 @@ class Text_box:
 
         #create a blank image and draw the lines on it
         height_per_line = self.font.get_linesize()
-        attrs = {"color":"#FFFFFF"}
+        attrs = {"color":"#FFFFFF","underline":False,"bold":False,"strikethrough":False,"italic":False}
+        funs = {"color":lambda color:None,
+                "underline":self.font.set_underline,
+                "bold":self.font.set_bold,
+                "strikethrough":self.font.set_strikethrough,
+                "italic":self.font.set_italic}
         self.image = pygame.Surface([self.width if self.width else max_width,height_per_line*len(str_list)])
 
         attr,value,position = operations.pop(0) if operations else (0,0,-1)
@@ -88,15 +93,21 @@ class Text_box:
                 step += len(line[:pos])
                 line = line[pos:]
                 attrs[attr] = value
+                funs[attr](value)
                 attr,value,position = operations.pop(0) if operations else (0,0,-1)
                 pos = position-step
             self.image.blit(self.font.render(line,True,attrs["color"]),(width,height_per_line*i))
             step += len(line)
             width = 0
+        
+        #Font reset
+        for i in funs:
+            funs[i](False)
     
     def set_text(self,text:str):
-        self.text = text
-        self.update()
+        if self.text != text:
+            self.text = text
+            self.update()
 
     def set_font(self,font:pygame.font.Font):
         self.font = font
@@ -183,3 +194,84 @@ class Button_box:
         if not image.get_rect() in self.rect:
             self.rect = image.get_rect()
         self.update()
+
+class Event_handler:
+    def __init__(self):
+        self.last_mouse = None
+        self.last_key = None
+        self.mouse = None
+        self.key = None
+        self.middle_mouse_y_rel = 0
+        self.mouse_rel = [0,0]
+        self.mouse_transform = {"left":0,"middle":1,"right":2}
+        self.mouse_pos = [0,0]
+        self.text = ""
+        self.edit_text = ""
+        self.edit_pos = 0
+        self.clock = pygame.time.Clock()
+
+        self.update()
+
+    def update(self):
+        self.last_mouse = self.mouse
+        self.last_key = self.key
+        self.middle_mouse_y_rel = 0
+        self.edit_text = ""
+        self.edit_pos = 0
+        self.text = ""
+
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                pygame.quit()
+                exit()
+            elif event.type == MOUSEWHEEL:
+                self.middle_mouse_y_rel = event.y
+            elif event.type == TEXTEDITING:
+                self.edit_text = event.text
+                self.edit_pos = event.start
+            elif event.type == TEXTINPUT:
+                self.text = event.text
+
+        self.key = pygame.key.get_pressed()
+        self.mouse = pygame.mouse.get_pressed()
+        self.mouse_rel = pygame.mouse.get_rel()
+        self.mouse_pos = pygame.mouse.get_pos()
+        self.clock.tick_busy_loop()
+
+    def get_key(self,key_value:int=-1):
+        if key_value == -1:
+            return [not i and j for i,j in zip(self.last_key,self.key)]
+        return not self.last_key[key_value] and self.key[key_value]
+
+    def get_mouse(self,mouse_value:str=""):
+        if not mouse_value:
+            return [not i and j for i,j in zip(self.last_mouse,self.mouse)]
+        return not self.last_mouse[self.mouse_transform[mouse_value]] and self.mouse[self.mouse_transform[mouse_value]]
+
+    def get_hold_key(self,key_value:int=-1):
+        if key_value == -1:
+            return [i for i in self.key]
+        return self.key[key_value]
+
+    def get_hold_mouse(self,mouse_value:str=""):
+        if not mouse_value:
+            return [i for i in self.mouse]
+        return self.mouse[self.mouse_transform[mouse_value]]
+
+    def get_middle_mouse_rel(self):
+        return self.middle_mouse_y_rel
+    
+    def get_mouse_rel(self):
+        return self.mouse_rel
+    
+    def get_mouse_pos(self):
+        return self.mouse_pos
+    
+    def get_text_input(self):
+        return [self.text,self.edit_text,self.edit_pos]
+    
+    def get_past_time(self):
+        return self.clock.get_time()
+    
+    def get_current_time(self):
+        return pygame.time.get_ticks()

@@ -26,26 +26,15 @@ texts = ["始","魔法少女芙乐艾","懒","PantheraLeo","C#是世界上最好
 angles = [0,72,144,216,288]
 speed = 0.05
 
-left_mouse_lock = False
+event_handler = Event_handler()
 
 while True:
-    y_rel = 0
-    for event in pygame.event.get():
-        if event.type == QUIT:
-            pygame.quit()
-            exit()
-        elif event.type == MOUSEWHEEL:
-            y_rel = event.y
-    
-    left_mouse,_,right_mouse = pygame.mouse.get_pressed()
-    if left_mouse:
-        if not left_mouse_lock:
-            left_mouse_lock = True
-        else:
-            left_mouse = False
-    else:
-        left_mouse_lock = False
-    mouse_x,mouse_y = pygame.mouse.get_pos()
+    event_handler.update()
+
+    y_rel = event_handler.get_middle_mouse_rel()
+    left_mouse,_,right_mouse = event_handler.get_mouse()
+    mouse_x,mouse_y = event_handler.get_mouse_pos()
+
     target = -1
     pos = list(map(lambda x:(600+300*math.cos(math.radians(x))-50,600+300*math.sin(math.radians(x))-50),angles))
 
@@ -61,6 +50,7 @@ while True:
     screen.fill((0,0,0))
     screen.blit(test.image,(1200,600))
     screen.blit(test1.image,(1200,200))
+    
     for i in range(5):
         screen.blit(buttons[i].image,pos[i])
         angles[i] = (angles[i]+speed)%360
