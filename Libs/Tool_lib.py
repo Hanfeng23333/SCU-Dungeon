@@ -37,12 +37,29 @@ def image_selected(surface:pygame.Surface,color:tuple=(255,215,0),size=3):
     pygame.draw.line(res_image,color,(width-1,height-1),(width*3/4,height-1),size)
     return res_image
 
-class Text_box:
-    def __init__(self,font:pygame.font.Font,width:int=0):
+def text_insert(text:str,pos:int,insert_text:str):
+    return text[:pos] + insert_text + text[pos:]
+
+class Base_box:
+    def __init__(self,rect:pygame.Rect):
+        self.rect = rect
+        self.image = pygame.Surface(self.rect.size)
+    
+    def set_pos(self,pos:tuple):
+        self.rect.topleft = pos
+
+    def show(self,surface:pygame.Surface):
+        surface.blit(self.image,self.rect)
+
+    def __contains__(self,rect:pygame.Rect):
+        return rect in self.rect
+
+class Text_box(Base_box):
+    def __init__(self,rect:pygame.Rect,font:pygame.font.Font,width:int=0): #rect.size is meaningless,the size will generate automatically
+        Base_box.__init__(self,rect)
         self.text = ""
-        self.font = font
         self.width = width
-        self.image = pygame.Surface([width,0])
+        self.font = font
 
     def update(self):
         #Preprocess
@@ -99,6 +116,7 @@ class Text_box:
             self.image.blit(self.font.render(line,True,attrs["color"]),(width,height_per_line*i))
             step += len(line)
             width = 0
+        self.rect.size = self.image.get_size()
         
         #Font reset
         for i in funs:
@@ -117,15 +135,14 @@ class Text_box:
         self.width = width
         self.update()
 
-class Scroll_box:
-    def __init__(self,image:pygame.Surface,rect:pygame.Rect,bar_width=0):
+class Scroll_box(Base_box):
+    def __init__(self,rect:pygame.Rect,image:pygame.Surface,bar_width=0):
+        Base_box.__init__(self,rect)
         self.master_image = image
-        self.rect = rect
-        self.image = pygame.Surface(self.rect.size)
         self.bar_width = bar_width
         self.image_y = 0
 
-    def update(self,mouse_pos:tuple=(0,0),mouse_y_rel:int=0):
+    def update(self,mouse_pos:tuple=(-1,-1),mouse_y_rel:int=0):
         self.image.fill((0,0,0))
         mouse_rect = pygame.Rect(mouse_pos,(0,0))
         delta_height = self.master_image.get_height()-self.rect.height
@@ -136,7 +153,7 @@ class Scroll_box:
         if self.bar_width and delta_height > 0:
             bar_height = self.rect.height**2/self.master_image.get_height()
             bar_y = self.image_y*(self.rect.height-bar_height)/delta_height
-            image_rect.update(image_rect.topleft,(image_rect.width-self.bar_width,image_rect.height))
+            image_rect.size = (image_rect.width-self.bar_width,image_rect.height)
             bar_rect = pygame.Rect(self.rect.width-self.bar_width,0,self.bar_width,self.rect.height)
 
             #draw the scroll bar
@@ -154,16 +171,15 @@ class Scroll_box:
         self.master_image = image.copy()
         self.update()
 
-class Button_box:
-    def __init__(self,image:pygame.Surface,rect:pygame.Rect=None,keep_clicked:bool=False,highlight:bool=False):
+class Button_box(Base_box):
+    def __init__(self,rect:pygame.Rect,image:pygame.Surface,keep_clicked:bool=False,highlight:bool=False):
+        Base_box.__init__(self,rect)
         self.master_image = image
-        self.rect = rect if rect else image.get_rect()
-        self.image = pygame.Surface(self.rect.size)
         self.keep_clicked = keep_clicked
         self.highlight = highlight
         self.on_click = False
 
-        if not image.get_rect() in self.rect:
+        if not image.get_rect(topleft=self.rect.topleft) in self.rect:
             raise OverflowError("The rect offered is smaller than the rect of the image!")
         
     def update(self,mouse_pos:tuple=(-1,-1),mouse_click:tuple=(False,False)) -> bool:
@@ -184,16 +200,80 @@ class Button_box:
         return clicked
 
     def set_rect(self,rect:pygame.Rect):
-        self.rect = rect if rect else self.master_image.get_rect()
-        if not self.master_image.get_rect() in rect:
+        self.rect = rect if rect else self.master_image.get_rect(topleft=self.rect.topleft)
+        if not self.master_image.get_rect(topleft=self.rect.topleft) in rect:
             raise OverflowError("The rect offered is smaller than the rect of the image!")
         self.update()
         
     def set_image(self,image:pygame.Surface):
         self.master_image = image.copy()
-        if not image.get_rect() in self.rect:
+        if not image.get_rect(topleft=self.rect.topleft) in self.rect:
             self.rect = image.get_rect()
         self.update()
+
+class Input_box(Base_box):
+    def __init__(self,rect:pygame.Rect,text_font:pygame.font.Font,description_font:pygame.font.Font=None,length_limit:int=0):
+        Base_box.__init__(self,rect)
+        self.text_box = Text_box(pygame.Rect(rect.topleft,(0,0)),text_font,rect.width)
+        self.description_box = Text_box(pygame.Rect(rect.topleft,(0,0)),description_font if description_font else text_font)
+        self.description_width = 0
+        self.length_limit = length_limit
+        self.is_input = False
+        self.is_cursor = False
+        self.cursor_pos = 0
+        self.last_time = 0
+        self.text = ""
+        self.res_text = ""
+
+    def update(self,current_time=0,mouse_pos:tuple=(-1,-1),mouse_click:tuple=(False,False),text_input:list=["","",0],enter_click:bool=False,move_cursor:tuple=(False,False)) -> bool: #text_input <- Event_handler.get_text_input()
+        mouse_rect = pygame.Rect(mouse_pos,(0,0))
+        if self.is_input:
+            if mouse_click[1] or (mouse_click[0] and mouse_rect not in pygame.Rect(0,self.description_width,self.rect.width-self.description_width,self.rect.height)):
+                self.is_input = False
+                self.is_cursor = False
+                self.text = text_insert(self.text,self.cursor_pos,text_input[1])
+                self.text_box.set_text(self.text)
+                pygame.key.stop_text_input()
+                return False
+            if enter_click:
+                self.submit_text()
+                return True
+            if current_time - self.last_time >= 60:
+                self.is_cursor = not self.is_cursor
+            if text_input[0]:
+                self.text = text_insert(self.text,self.cursor_pos,text_input[1])
+                self.cursor_pos += len(self.text)
+            if not text_input[1]:
+                if move_cursor[0]:
+                    self.cursor_pos = max(self.cursor_pos-1,0)
+                elif move_cursor[1]:
+                    self.cursor_pos = min(self.cursor_pos+1,len(self.text))
+            text_list = [self.text[:self.cursor_pos],"<underline=True>",text_input[1][:text_input[2]],"|" if self.is_cursor else "",text_input[1][text_input[2]:],"<underline=False>",self.text[self.cursor_pos:]]
+            self.text_box.set_text("".join(text_list))
+            pygame.key.set_text_input_rect(pygame.Rect(self.text_box.font.size(text_list[0]+text_list[2])[0]%(self.text_box.width if self.text_box.width else self.text_box.rect.width)+self.text_box.rect.width,self.text_box.rect.height,0,0))
+        elif mouse_click[0] and mouse_rect in pygame.Rect(self.description_width,self.rect.top,self.rect.width-self.description_width,self.rect.height):
+            self.is_input = True
+            self.cursor_pos = len(self.text)
+            pygame.key.start_text_input()
+        return False
+            
+    def set_description(self,description:str=""):
+        self.description_box.set_text(description)
+        self.description_width = self.description_box.image.get_width()
+        self.text_box.set_width(self.rect.width-self.description_width)
+        self.text_box.rect.left = self.rect.left + self.description_width
+        self.update()
+
+    def submit_text(self):
+        self.res_text = self.text
+        self.text = ""
+        self.cursor_pos = 0
+        self.update()
+
+    def set_pos(self,pos:tuple):
+        super().set_pos(pos)
+        self.description_box.rect.topleft = pos
+        self.text_box.rect.topleft = (self.rect.left+self.description_width,self.rect.top)
 
 class Event_handler:
     def __init__(self):
